@@ -1,0 +1,37 @@
+rules:
+  - id: alaya-tui-command-injection
+    patterns:
+      - pattern: exec.Command($CMD, ...)
+      - pattern-not-inside: |
+          parts := strings.Fields(...)
+          ...
+          exec.Command(parts[0], parts[1:]...)
+    message: >
+      Subprocess command should be split safely. Avoid passing unsanitized
+      user input directly to exec.Command.
+    languages: [go]
+    severity: ERROR
+
+  - id: alaya-tui-path-traversal
+    patterns:
+      - pattern: filepath.Join($BASE, $INPUT, ...)
+      - metavariable-regex:
+          metavariable: $INPUT
+          regex: ".*\\b(input|user|param|query|arg).*"
+    message: >
+      Potential path traversal. Validate that the joined path stays within
+      the expected base directory.
+    languages: [go]
+    severity: WARNING
+
+  - id: alaya-tui-no-hardcoded-secrets
+    pattern: |
+      $KEY = "..."
+    metavariable-regex:
+      metavariable: $KEY
+      regex: "(?i).*(secret|password|token|api_key|apikey).*"
+    message: >
+      Possible hardcoded secret. API keys should be stored in the OS
+      keychain, not in source code.
+    languages: [go]
+    severity: ERROR

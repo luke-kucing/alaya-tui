@@ -12,12 +12,14 @@ import (
 )
 
 type DashboardModel struct {
-	notes      []backend.NoteMeta
-	entries    []backend.AuditEntry
-	agentName  string
-	vaultDir   string
-	width      int
-	height     int
+	notes        []backend.NoteMeta
+	entries      []backend.AuditEntry
+	agentName    string
+	vaultDir     string
+	serverStatus backend.ServerStatus
+	vaultHealthy bool
+	width        int
+	height       int
 }
 
 func NewDashboardModel(vaultDir, agentName string) DashboardModel {
@@ -37,6 +39,14 @@ func (m *DashboardModel) SetEntries(entries []backend.AuditEntry) {
 
 func (m *DashboardModel) AddEntry(e backend.AuditEntry) {
 	m.entries = append(m.entries, e)
+}
+
+func (m *DashboardModel) SetServerStatus(s backend.ServerStatus) {
+	m.serverStatus = s
+}
+
+func (m *DashboardModel) SetVaultHealthy(ok bool) {
+	m.vaultHealthy = ok
 }
 
 func (m *DashboardModel) SetSize(w, h int) {
@@ -65,7 +75,26 @@ func (m DashboardModel) View() string {
 	vaultInfo += fmt.Sprintf("  %s %s\n", labelStyle.Render("Path:"), valueStyle.Render(m.vaultDir))
 	vaultInfo += fmt.Sprintf("  %s %s\n", labelStyle.Render("Notes:"), valueStyle.Render(fmt.Sprintf("%d", len(m.notes))))
 	vaultInfo += fmt.Sprintf("  %s %s\n", labelStyle.Render("Directories:"), valueStyle.Render(fmt.Sprintf("%d", len(dirCounts))))
-	vaultInfo += fmt.Sprintf("  %s %s", labelStyle.Render("Active Agent:"), valueStyle.Render(m.agentName))
+	vaultInfo += fmt.Sprintf("  %s %s\n", labelStyle.Render("Active Agent:"), valueStyle.Render(m.agentName))
+
+	// Server status
+	var serverStr string
+	switch m.serverStatus {
+	case backend.ServerRunning:
+		serverStr = successStyle.Render("running")
+	case backend.ServerStopped:
+		serverStr = errorStyle.Render("stopped") + mutedStyle.Render("  (press 's' to start)")
+	default:
+		serverStr = mutedStyle.Render("unknown")
+	}
+	vaultInfo += fmt.Sprintf("  %s %s\n", labelStyle.Render("MCP Server:"), serverStr)
+
+	// Vault health
+	if m.vaultHealthy {
+		vaultInfo += fmt.Sprintf("  %s %s", labelStyle.Render("Vault:"), successStyle.Render("healthy"))
+	} else {
+		vaultInfo += fmt.Sprintf("  %s %s", labelStyle.Render("Vault:"), errorStyle.Render("not found or empty"))
+	}
 	sections = append(sections, vaultInfo)
 
 	// Top tags

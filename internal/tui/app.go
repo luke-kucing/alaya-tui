@@ -2,7 +2,9 @@ package tui
 
 import (
 	"fmt"
+	"os"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -26,6 +28,15 @@ var tabNames = []string{"Dashboard", "Activity", "Notes", "Chat", "Settings"}
 // auditMsg delivers a new audit entry from the tail goroutine.
 type auditMsg backend.AuditEntry
 
+// serverStatusMsg delivers a server health check result.
+type serverStatusMsg backend.ServerStatus
+
+// serverSpawnedMsg signals that we tried to spawn the server.
+type serverSpawnedMsg struct {
+	proc *os.Process
+	err  error
+}
+
 type AppModel struct {
 	cfg       *config.Config
 	vaultDir  string
@@ -39,9 +50,10 @@ type AppModel struct {
 	chat      ChatModel
 	settings  SettingsModel
 
-	auditCh  <-chan backend.AuditEntry
-	auditDone chan struct{}
-	program   *tea.Program
+	auditCh      <-chan backend.AuditEntry
+	auditDone    chan struct{}
+	program      *tea.Program
+	serverProc   *os.Process // non-nil if we spawned the MCP server
 }
 
 func NewApp(cfg *config.Config, vaultDir string) AppModel {
@@ -77,7 +89,21 @@ func (m AppModel) Init() tea.Cmd {
 	return tea.Batch(
 		m.loadVault,
 		m.startAuditTail,
+		m.checkServer,
+		m.serverTick(),
 	)
+}
+
+func (m AppModel) checkServer() tea.Msg {
+	status := backend.CheckServer()
+	return serverStatusMsg(status)
+}
+
+// serverTick re-checks server status every 10 seconds.
+func (m AppModel) serverTick() tea.Cmd {
+	return tea.Tick(10*time.Second, func(t time.Time) tea.Msg {
+		return serverStatusMsg(backend.CheckServer())
+	})
 }
 
 func (m AppModel) loadVault() tea.Msg {
@@ -128,6 +154,19 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.chat.SetSize(m.width, contentHeight)
 		m.settings.SetSize(m.width, contentHeight)
 
+	case serverStatusMsg:
+		m.dashboard.SetServerStatus(backend.ServerStatus(msg))
+		m.dashboard.SetVaultHealthy(backend.CheckVaultHealth(m.vaultDir))
+		cmds = append(cmds, m.serverTick())
+
+	case serverSpawnedMsg:
+		if msg.err != nil {
+			m.dashboard.SetServerStatus(backend.ServerStopped)
+		} else {
+			m.serverProc = msg.proc
+			m.dashboard.SetServerStatus(backend.ServerRunning)
+		}
+
 	case vaultLoadedMsg:
 		notes := []backend.NoteMeta(msg)
 		m.dashboard.SetNotes(notes)
@@ -169,6 +208,17 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "5":
 				m.switchTab(tabSettings)
 				return m, nil
+			case "s":
+				if m.activeTab == tabDashboard && m.dashboard.serverStatus == backend.ServerStopped {
+					vd := m.vaultDir
+					return m, func() tea.Msg {
+						proc, err := backend.SpawnServer(vd)
+						if err != nil {
+							return serverSpawnedMsg{err: err}
+						}
+						return serverSpawnedMsg{err: nil, proc: proc}
+					}
+				}
 			case "tab":
 				next := (m.activeTab + 1) % 5
 				m.switchTab(next)
@@ -236,6 +286,9 @@ func (m AppModel) isEditing() bool {
 func (m *AppModel) cleanup() {
 	close(m.auditDone)
 	m.chat.killAgent()
+	if m.serverProc != nil {
+		m.serverProc.Kill()
+	}
 }
 
 func (m AppModel) View() string {
