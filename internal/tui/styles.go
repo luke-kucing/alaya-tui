@@ -8,10 +8,8 @@ var (
 	colorSecondary = lipgloss.Color("#6366F1") // indigo
 	colorSuccess   = lipgloss.Color("#22C55E") // green
 	colorError     = lipgloss.Color("#EF4444") // red
-	colorWarning   = lipgloss.Color("#F59E0B") // amber
-	colorMuted     = lipgloss.Color("#6B7280") // gray
-	colorBg        = lipgloss.Color("#1E1B2E") // dark purple bg
-	colorSurface   = lipgloss.Color("#2D2B3E") // lighter surface
+	colorMuted   = lipgloss.Color("#6B7280") // gray
+	colorSurface = lipgloss.Color("#2D2B3E") // lighter surface
 
 	// Tab bar
 	activeTabStyle = lipgloss.NewStyle().
@@ -23,10 +21,6 @@ var (
 	inactiveTabStyle = lipgloss.NewStyle().
 				Foreground(colorMuted).
 				Padding(0, 2)
-
-	tabGapStyle = lipgloss.NewStyle().
-			Foreground(colorMuted).
-			SetString(" | ")
 
 	// Content area
 	titleStyle = lipgloss.NewStyle().

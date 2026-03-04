@@ -287,7 +287,7 @@ func (m *AppModel) cleanup() {
 	close(m.auditDone)
 	m.chat.killAgent()
 	if m.serverProc != nil {
-		m.serverProc.Kill()
+		_ = m.serverProc.Kill()
 	}
 }
 

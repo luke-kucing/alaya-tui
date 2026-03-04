@@ -37,7 +37,7 @@ func Load(path string) (*Config, error) {
 	cfg := DefaultConfig()
 	cfg.path = path
 
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304 -- path is from user config flag or default
 	if err != nil {
 		if os.IsNotExist(err) {
 			// Write default config
@@ -59,7 +59,7 @@ func Load(path string) (*Config, error) {
 // Save writes the config to its file path.
 func (c *Config) Save() error {
 	dir := filepath.Dir(c.path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return err
 	}
 

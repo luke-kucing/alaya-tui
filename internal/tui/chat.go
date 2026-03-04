@@ -85,7 +85,8 @@ func (m *ChatModel) spawnAgent() {
 		return
 	}
 
-	m.cmd = exec.Command(parts[0], parts[1:]...)
+	// nosemgrep: go.lang.security.audit.dangerous-exec-command.dangerous-exec-command
+	m.cmd = exec.Command(parts[0], parts[1:]...) // #nosec G204 -- command from user config file
 
 	// Build environment: inherit current env + config env + API keys
 	env := os.Environ()
@@ -149,7 +150,7 @@ func (m *ChatModel) spawnAgent() {
 
 	// Wait for exit in background
 	go func() {
-		m.cmd.Wait()
+		_ = m.cmd.Wait()
 		programSend(chatExitMsg{})
 	}()
 }
@@ -160,8 +161,8 @@ var programSend func(tea.Msg)
 
 func (m *ChatModel) killAgent() {
 	if m.cmd != nil && m.cmd.Process != nil {
-		m.cmd.Process.Kill()
-		m.cmd.Wait()
+		_ = m.cmd.Process.Kill()
+		_ = m.cmd.Wait()
 	}
 	m.cmd = nil
 	m.stdin = nil

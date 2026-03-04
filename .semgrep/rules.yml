@@ -2,6 +2,7 @@ rules:
   - id: alaya-tui-command-injection
     patterns:
       - pattern: exec.Command($CMD, ...)
+      - pattern-not: exec.Command("...", ...)
       - pattern-not-inside: |
           parts := strings.Fields(...)
           ...
@@ -25,11 +26,11 @@ rules:
     severity: WARNING
 
   - id: alaya-tui-no-hardcoded-secrets
-    pattern: |
-      $KEY = "..."
-    metavariable-regex:
-      metavariable: $KEY
-      regex: "(?i).*(secret|password|token|api_key|apikey).*"
+    patterns:
+      - pattern: $KEY = "..."
+      - metavariable-regex:
+          metavariable: $KEY
+          regex: "(?i).*(secret|password|token|api_key|apikey).*"
     message: >
       Possible hardcoded secret. API keys should be stored in the OS
       keychain, not in source code.

@@ -64,7 +64,7 @@ func ScanVault(vaultRoot string) ([]NoteMeta, error) {
 // parseFrontmatter reads YAML frontmatter from a markdown file.
 // Handles simple key: value and key: [list] formats.
 func parseFrontmatter(path string, meta *NoteMeta) {
-	f, err := os.Open(path)
+	f, err := os.Open(path) // #nosec G304 -- path from filepath.Walk of vault
 	if err != nil {
 		return
 	}
@@ -133,7 +133,7 @@ func parseYAMLList(value string) []string {
 
 // ReadNotePreview returns the first maxLines lines of a note file.
 func ReadNotePreview(path string, maxLines int) (string, error) {
-	f, err := os.Open(path)
+	f, err := os.Open(path) // #nosec G304 -- path from vault scan
 	if err != nil {
 		return "", err
 	}

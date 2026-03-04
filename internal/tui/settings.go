@@ -143,8 +143,11 @@ func (m *SettingsModel) startEdit() {
 	case sectionDefault:
 		if m.cursor < len(m.cfg.Agents) {
 			m.cfg.DefaultAgent = m.cfg.Agents[m.cursor].Name
-			m.cfg.Save()
-			m.statusMsg = fmt.Sprintf("Default agent set to '%s'", m.cfg.DefaultAgent)
+			if err := m.cfg.Save(); err != nil {
+				m.statusMsg = errorStyle.Render("Failed to save: " + err.Error())
+			} else {
+				m.statusMsg = fmt.Sprintf("Default agent set to '%s'", m.cfg.DefaultAgent)
+			}
 		}
 	}
 }
@@ -160,8 +163,11 @@ func (m *SettingsModel) applyEdit() {
 				break
 			}
 		}
-		m.cfg.Save()
-		m.statusMsg = fmt.Sprintf("Updated command for '%s'", m.editTarget)
+		if err := m.cfg.Save(); err != nil {
+			m.statusMsg = errorStyle.Render("Failed to save: " + err.Error())
+		} else {
+			m.statusMsg = fmt.Sprintf("Updated command for '%s'", m.editTarget)
+		}
 
 	case "api_key":
 		if value != "" {
@@ -174,8 +180,11 @@ func (m *SettingsModel) applyEdit() {
 
 	case "vault_dir":
 		m.cfg.VaultDir = value
-		m.cfg.Save()
-		m.statusMsg = "Vault directory updated"
+		if err := m.cfg.Save(); err != nil {
+			m.statusMsg = errorStyle.Render("Failed to save: " + err.Error())
+		} else {
+			m.statusMsg = "Vault directory updated"
+		}
 
 	case "new_agent_name":
 		// Second step: get command
@@ -191,8 +200,11 @@ func (m *SettingsModel) applyEdit() {
 			Name:    m.editTarget,
 			Command: value,
 		})
-		m.cfg.Save()
-		m.statusMsg = fmt.Sprintf("Added agent '%s'", m.editTarget)
+		if err := m.cfg.Save(); err != nil {
+			m.statusMsg = errorStyle.Render("Failed to save: " + err.Error())
+		} else {
+			m.statusMsg = fmt.Sprintf("Added agent '%s'", m.editTarget)
+		}
 	}
 }
 
@@ -202,15 +214,21 @@ func (m *SettingsModel) deleteItem() {
 		if m.cursor < len(m.cfg.Agents) {
 			name := m.cfg.Agents[m.cursor].Name
 			m.cfg.RemoveAgent(name)
-			m.cfg.Save()
-			m.statusMsg = fmt.Sprintf("Removed agent '%s'", name)
+			if err := m.cfg.Save(); err != nil {
+				m.statusMsg = errorStyle.Render("Failed to save: " + err.Error())
+			} else {
+				m.statusMsg = fmt.Sprintf("Removed agent '%s'", name)
+			}
 			m.clampCursor()
 		}
 	case sectionAPIKeys:
 		if m.cursor < len(config.KnownProviders) {
 			provider := config.KnownProviders[m.cursor]
-			config.DeleteAPIKey(provider)
-			m.statusMsg = fmt.Sprintf("Deleted API key for '%s'", provider)
+			if err := config.DeleteAPIKey(provider); err != nil {
+				m.statusMsg = errorStyle.Render("Failed to delete key: " + err.Error())
+			} else {
+				m.statusMsg = fmt.Sprintf("Deleted API key for '%s'", provider)
+			}
 		}
 	}
 }

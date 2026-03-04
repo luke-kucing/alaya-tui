@@ -57,7 +57,7 @@ func TailAuditLog(vaultRoot string, done <-chan struct{}) (<-chan AuditEntry, er
 // readFrom reads JSONL lines from the given offset and sends parsed entries to ch.
 // Returns the new offset after reading.
 func readFrom(path string, offset int64, ch chan<- AuditEntry) int64 {
-	f, err := os.Open(path)
+	f, err := os.Open(path) // #nosec G304 -- path is constructed from vault root
 	if err != nil {
 		return offset
 	}
@@ -91,7 +91,7 @@ func readFrom(path string, offset int64, ch chan<- AuditEntry) int64 {
 func LoadAuditLog(vaultRoot string) ([]AuditEntry, error) {
 	path := filepath.Join(vaultRoot, ".zk", "audit.jsonl")
 
-	f, err := os.Open(path)
+	f, err := os.Open(path) // #nosec G304 -- path is constructed from vault root
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
