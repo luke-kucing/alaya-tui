@@ -3,6 +3,9 @@ rules:
     patterns:
       - pattern: exec.Command($CMD, ...)
       - pattern-not: exec.Command("...", ...)
+      - pattern-not: exec.Command("...", "...", ...)
+      - pattern-not: exec.Command("...", "...", "...", ...)
+      - pattern-not: exec.Command("...", "...", "...", "...", ...)
       - pattern-not-inside: |
           parts := strings.Fields(...)
           ...
