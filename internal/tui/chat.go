@@ -95,7 +95,7 @@ func (m *ChatModel) spawnAgent() {
 		return
 	}
 
-	m.cmd = exec.Command(exe, parts[1:]...) // #nosec G204 -- nosemgrep: go.lang.security.audit.dangerous-exec-command.dangerous-exec-command,alaya-tui-command-injection -- exe validated by validateAgentExecutable above
+	m.cmd = exec.Command(exe, parts[1:]...) // nosemgrep: go.lang.security.audit.dangerous-exec-command.dangerous-exec-command,alaya-tui-command-injection  #nosec G204 -- exe validated by validateAgentExecutable above
 
 	// Build environment: inherit current env + config env + API keys
 	env := os.Environ()
