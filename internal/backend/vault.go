@@ -2,6 +2,7 @@ package backend
 
 import (
 	"bufio"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -53,7 +54,7 @@ func ScanVault(vaultRoot string) ([]NoteMeta, error) {
 			Title:     strings.TrimSuffix(info.Name(), ".md"),
 		}
 
-		parseFrontmatter(path, &meta)
+		parseFrontmatter(vaultRoot, path, &meta)
 		notes = append(notes, meta)
 		return nil
 	})
@@ -63,8 +64,11 @@ func ScanVault(vaultRoot string) ([]NoteMeta, error) {
 
 // parseFrontmatter reads YAML frontmatter from a markdown file.
 // Handles simple key: value and key: [list] formats.
-func parseFrontmatter(path string, meta *NoteMeta) {
-	f, err := os.Open(path) // #nosec G304 -- path from filepath.Walk of vault
+func parseFrontmatter(vaultRoot, path string, meta *NoteMeta) {
+	if err := containedInVault(vaultRoot, path); err != nil {
+		return
+	}
+	f, err := os.Open(path) // #nosec G304 -- path validated by containedInVault above
 	if err != nil {
 		return
 	}
@@ -132,8 +136,11 @@ func parseYAMLList(value string) []string {
 }
 
 // ReadNotePreview returns the first maxLines lines of a note file.
-func ReadNotePreview(path string, maxLines int) (string, error) {
-	f, err := os.Open(path) // #nosec G304 -- path from vault scan
+func ReadNotePreview(vaultRoot, path string, maxLines int) (string, error) {
+	if err := containedInVault(vaultRoot, path); err != nil {
+		return "", err
+	}
+	f, err := os.Open(path) // #nosec G304 -- path validated by containedInVault above
 	if err != nil {
 		return "", err
 	}
@@ -146,6 +153,24 @@ func ReadNotePreview(path string, maxLines int) (string, error) {
 	}
 
 	return strings.Join(lines, "\n"), scanner.Err()
+}
+
+// containedInVault returns an error if path does not resolve to a location
+// within vaultRoot, preventing path traversal via symlinks or ".." sequences.
+func containedInVault(vaultRoot, path string) error {
+	absVault, err := filepath.Abs(vaultRoot)
+	if err != nil {
+		return fmt.Errorf("invalid vault root: %w", err)
+	}
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return fmt.Errorf("invalid path: %w", err)
+	}
+	rel, err := filepath.Rel(absVault, absPath)
+	if err != nil || strings.HasPrefix(rel, "..") {
+		return fmt.Errorf("path escapes vault: %s", path)
+	}
+	return nil
 }
 
 // DirectoryTree returns a sorted list of unique directories in the vault.

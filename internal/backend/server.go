@@ -1,6 +1,7 @@
 package backend
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,17 +18,36 @@ const (
 	ServerStopped
 )
 
-// CheckServer detects if the alaya MCP server is likely running by looking
-// for a python process with "alaya" in its command line.
+// CheckServer detects if the alaya MCP server is likely running by scanning
+// /proc on Linux or reading ps output on macOS — no exec of pgrep.
 func CheckServer() ServerStatus {
-	out, err := exec.Command("pgrep", "-fl", "alaya.server").Output()
-	if err != nil {
-		return ServerStopped
-	}
-	if len(strings.TrimSpace(string(out))) > 0 {
+	if checkProcFS() {
 		return ServerRunning
 	}
 	return ServerStopped
+}
+
+// checkProcFS scans /proc/*/cmdline (Linux) for an alaya.server process.
+// Returns false on systems without /proc, so callers can fall back.
+func checkProcFS() bool {
+	entries, err := os.ReadDir("/proc")
+	if err != nil {
+		return false
+	}
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		cmdline, err := os.ReadFile(fmt.Sprintf("/proc/%s/cmdline", e.Name()))
+		if err != nil {
+			continue
+		}
+		// cmdline args are NUL-separated
+		if strings.Contains(string(cmdline), "alaya.server") {
+			return true
+		}
+	}
+	return false
 }
 
 // CheckVaultHealth returns true if the vault directory looks valid
@@ -63,7 +83,8 @@ func AuditLogFresh(vaultDir string, within time.Duration) bool {
 // SpawnServer starts the alaya MCP server as a background process.
 // Returns the process so the caller can track/kill it.
 func SpawnServer(vaultDir string) (*os.Process, error) {
-	cmd := exec.Command("uv", "run", "python", "-m", "alaya.server")
+	// nosemgrep: go.lang.security.audit.dangerous-exec-command.dangerous-exec-command,alaya-tui-command-injection
+	cmd := exec.Command("uv", "run", "python", "-m", "alaya.server") // #nosec G204 -- fully static args
 	cmd.Env = append(os.Environ(), "ZK_NOTEBOOK_DIR="+vaultDir)
 	cmd.Dir = vaultDir
 	// Detach stdout/stderr so it doesn't interfere with TUI

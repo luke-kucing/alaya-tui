@@ -67,7 +67,7 @@ func NewApp(cfg *config.Config, vaultDir string) AppModel {
 		vaultDir:  vaultDir,
 		dashboard: NewDashboardModel(vaultDir, agentName),
 		activity:  NewActivityModel(),
-		notes:     NewNotesModel(),
+		notes:     NewNotesModel(vaultDir),
 		chat:      NewChatModel(cfg),
 		settings:  NewSettingsModel(cfg),
 		auditDone: make(chan struct{}),

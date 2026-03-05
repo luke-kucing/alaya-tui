@@ -2,11 +2,6 @@ rules:
   - id: alaya-tui-command-injection
     patterns:
       - pattern: exec.Command($CMD, ...)
-      - pattern-not: exec.Command("...", ...)
-      - pattern-not-inside: |
-          parts := strings.Fields(...)
-          ...
-          exec.Command(parts[0], parts[1:]...)
     message: >
       Subprocess command should be split safely. Avoid passing unsanitized
       user input directly to exec.Command.
