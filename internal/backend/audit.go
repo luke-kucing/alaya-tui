@@ -20,7 +20,11 @@ type AuditEntry struct {
 // TailAuditLog watches the audit.jsonl file and sends new entries on the returned channel.
 // It polls every 500ms for new content. Close the done channel to stop tailing.
 func TailAuditLog(vaultRoot string, done <-chan struct{}) (<-chan AuditEntry, error) {
-	path := filepath.Join(vaultRoot, ".zk", "audit.jsonl")
+	path := findAuditLog(vaultRoot)
+	if path == "" {
+		// No audit log yet — use the default .zk path so we pick it up when it appears
+		path = filepath.Join(vaultRoot, ".zk", "audit.jsonl")
+	}
 
 	ch := make(chan AuditEntry, 64)
 
@@ -89,7 +93,10 @@ func readFrom(path string, offset int64, ch chan<- AuditEntry) int64 {
 
 // LoadAuditLog reads all existing entries from the audit log.
 func LoadAuditLog(vaultRoot string) ([]AuditEntry, error) {
-	path := filepath.Join(vaultRoot, ".zk", "audit.jsonl")
+	path := findAuditLog(vaultRoot)
+	if path == "" {
+		return nil, nil
+	}
 
 	f, err := os.Open(path) // #nosec G304 -- path is constructed from vault root
 	if err != nil {

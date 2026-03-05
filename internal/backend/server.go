@@ -51,11 +51,13 @@ func checkProcFS() bool {
 }
 
 // CheckVaultHealth returns true if the vault directory looks valid
-// (has .zk directory or at least some .md files).
+// (has .zk or .obsidian directory, or at least some .md files).
 func CheckVaultHealth(vaultDir string) bool {
-	zkDir := filepath.Join(vaultDir, ".zk")
-	if info, err := os.Stat(zkDir); err == nil && info.IsDir() {
-		return true
+	for _, dataDir := range []string{".zk", ".obsidian"} {
+		dir := filepath.Join(vaultDir, dataDir)
+		if info, err := os.Stat(dir); err == nil && info.IsDir() {
+			return true
+		}
 	}
 	// Fallback: check for any .md files
 	entries, err := os.ReadDir(vaultDir)
@@ -72,7 +74,10 @@ func CheckVaultHealth(vaultDir string) bool {
 
 // AuditLogFresh returns true if audit.jsonl was modified within the given duration.
 func AuditLogFresh(vaultDir string, within time.Duration) bool {
-	path := filepath.Join(vaultDir, ".zk", "audit.jsonl")
+	path := findAuditLog(vaultDir)
+	if path == "" {
+		return false
+	}
 	info, err := os.Stat(path)
 	if err != nil {
 		return false
@@ -84,8 +89,8 @@ func AuditLogFresh(vaultDir string, within time.Duration) bool {
 // Returns the process so the caller can track/kill it.
 func SpawnServer(vaultDir string) (*os.Process, error) {
 	// nosemgrep: go.lang.security.audit.dangerous-exec-command.dangerous-exec-command,alaya-tui-command-injection
-	cmd := exec.Command("uv", "run", "python", "-m", "alaya.server") // #nosec G204 -- fully static args
-	cmd.Env = append(os.Environ(), "ZK_NOTEBOOK_DIR="+vaultDir)
+	cmd := exec.Command("uv", "run", "alaya") // #nosec G204 -- fully static args
+	cmd.Env = append(os.Environ(), "ALAYA_VAULT_DIR="+vaultDir)
 	cmd.Dir = vaultDir
 	// Detach stdout/stderr so it doesn't interfere with TUI
 	cmd.Stdout = nil
@@ -95,4 +100,16 @@ func SpawnServer(vaultDir string) (*os.Process, error) {
 		return nil, err
 	}
 	return cmd.Process, nil
+}
+
+// findAuditLog returns the path to audit.jsonl, checking both .zk/ and .obsidian/.
+// Returns empty string if not found.
+func findAuditLog(vaultDir string) string {
+	for _, dataDir := range []string{".zk", ".obsidian"} {
+		path := filepath.Join(vaultDir, dataDir, "audit.jsonl")
+		if _, err := os.Stat(path); err == nil {
+			return path
+		}
+	}
+	return ""
 }

@@ -10,8 +10,10 @@ import (
 
 var skipDirs = map[string]bool{
 	".zk":          true,
+	".obsidian":    true,
 	".git":         true,
 	".venv":        true,
+	".trash":       true,
 	"__pycache__":  true,
 	"node_modules": true,
 }

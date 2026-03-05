@@ -162,19 +162,20 @@ Keys are automatically injected into the environment of every agent subprocess a
 Resolution order (first match wins):
 
 1. `--vault-dir` CLI flag
-2. `ZK_NOTEBOOK_DIR` environment variable
-3. `vault_dir` in config file
-4. Default: `~/notes`
+2. `ALAYA_VAULT_DIR` environment variable
+3. `ZK_NOTEBOOK_DIR` environment variable (backward compatibility)
+4. `vault_dir` in config file
+5. Default: `~/notes`
 
 ---
 
 ## Vault Structure
 
-A vault is a directory of markdown files. alaya-tui scans it recursively, skipping `.git`, `.zk`, `.venv`, `__pycache__`, and `node_modules`.
+A vault is a directory of markdown files. alaya-tui scans it recursively, skipping `.git`, `.zk`, `.obsidian`, `.venv`, `.trash`, `__pycache__`, and `node_modules`.
 
 ```
 ~/notes/
-├── .zk/
+├── .zk/ or .obsidian/
 │   └── audit.jsonl      # Activity log written by the alaya MCP server
 ├── index.md
 ├── projects/
@@ -202,7 +203,7 @@ Supported frontmatter keys: `title`, `date`, `tags`. Tags support both inline li
 
 ### Audit Log
 
-The alaya MCP server writes activity to `.zk/audit.jsonl` as newline-delimited JSON:
+The alaya MCP server writes activity to `audit.jsonl` in the vault data directory (`.zk/` or `.obsidian/`) as newline-delimited JSON:
 
 ```json
 {"ts": 1705356000.5, "tool": "read_note", "args": {"path": "index.md"}, "status": "ok", "duration_ms": 12.3, "summary": "Read index.md"}
@@ -233,7 +234,7 @@ Shows a summary of your vault and system state:
 - **Vault path** and note/directory counts
 - **Active agent** name
 - **MCP server status** (running / stopped / unknown)
-- **Vault health** (healthy if `.zk/` exists or `.md` files are present)
+- **Vault health** (healthy if `.zk/` or `.obsidian/` exists, or `.md` files are present)
 - **Top 10 tags** by frequency across all notes
 - **Recent activity** — last 5 audit log entries
 - **Error count** from the audit log
@@ -330,10 +331,10 @@ alaya-tui can spawn and monitor the [alaya MCP server](https://github.com/lukehi
 Press `s` on the Dashboard tab. alaya-tui runs:
 
 ```
-uv run python -m alaya.server
+uv run alaya
 ```
 
-with `ZK_NOTEBOOK_DIR` set to your vault path and the working directory set to the vault root. The process runs in the background; stdout/stderr are detached so they do not interfere with the TUI.
+with `ALAYA_VAULT_DIR` set to your vault path and the working directory set to the vault root. The process runs in the background; stdout/stderr are detached so they do not interfere with the TUI.
 
 **Health check:**
 
@@ -495,5 +496,5 @@ Any `exec.Command` call that is intentionally safe must carry an inline suppress
 
 ```go
 // nosemgrep: go.lang.security.audit.dangerous-exec-command.dangerous-exec-command,alaya-tui-command-injection
-cmd := exec.Command("uv", "run", "python", "-m", "alaya.server") // #nosec G204 -- fully static args
+cmd := exec.Command("uv", "run", "alaya") // #nosec G204 -- fully static args
 ```
