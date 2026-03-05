@@ -95,14 +95,15 @@ func (m AppModel) Init() tea.Cmd {
 }
 
 func (m AppModel) checkServer() tea.Msg {
-	status := backend.CheckServer()
+	status := backend.CheckServerWithProc(m.serverProc)
 	return serverStatusMsg(status)
 }
 
 // serverTick re-checks server status every 10 seconds.
 func (m AppModel) serverTick() tea.Cmd {
+	proc := m.serverProc
 	return tea.Tick(10*time.Second, func(t time.Time) tea.Msg {
-		return serverStatusMsg(backend.CheckServer())
+		return serverStatusMsg(backend.CheckServerWithProc(proc))
 	})
 }
 
@@ -272,7 +273,7 @@ func (m *AppModel) switchTab(t tab) {
 
 func (m AppModel) isEditing() bool {
 	if m.activeTab == tabChat {
-		return true
+		return m.chat.inputFocused
 	}
 	if m.activeTab == tabActivity {
 		return m.activity.filtering

@@ -3,19 +3,23 @@ package tui
 import (
 	"bufio"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/creack/pty"
 
 	"github.com/lukehinds/alaya-tui/internal/config"
 )
+
+// ansiEscape matches ANSI/VT100 escape sequences for stripping from PTY output.
+var ansiEscape = regexp.MustCompile(`\x1b(\[[0-9;?]*[A-Za-z]|[()][AB012]|\][^\x07]*\x07|[^\[])`)
 
 // Messages for subprocess output
 type chatOutputMsg string
@@ -23,16 +27,17 @@ type chatErrorMsg string
 type chatExitMsg struct{}
 
 type ChatModel struct {
-	cfg       *config.Config
-	agentName string
-	cmd       *exec.Cmd
-	stdin     io.WriteCloser
-	viewport  viewport.Model
-	input     textinput.Model
-	output    []string
-	started   bool
-	width     int
-	height    int
+	cfg          *config.Config
+	agentName    string
+	cmd          *exec.Cmd
+	pty          *os.File // PTY master — read output, write input
+	viewport     viewport.Model
+	input        textinput.Model
+	inputFocused bool
+	output       []string
+	started      bool
+	width        int
+	height       int
 }
 
 func NewChatModel(cfg *config.Config) ChatModel {
@@ -61,6 +66,7 @@ func (m *ChatModel) SetSize(w, h int) {
 }
 
 func (m *ChatModel) Focus() {
+	m.inputFocused = true
 	m.input.Focus()
 	if !m.started {
 		m.spawnAgent()
@@ -68,6 +74,7 @@ func (m *ChatModel) Focus() {
 }
 
 func (m *ChatModel) Blur() {
+	m.inputFocused = false
 	m.input.Blur()
 }
 
@@ -108,53 +115,27 @@ func (m *ChatModel) spawnAgent() {
 	}
 	m.cmd.Env = env
 
-	var err error
-	m.stdin, err = m.cmd.StdinPipe()
+	// Start process with a PTY so the agent sees a real terminal.
+	ptmx, err := pty.Start(m.cmd)
 	if err != nil {
-		m.output = append(m.output, errorStyle.Render("Failed to create stdin pipe: "+err.Error()))
-		m.updateViewport()
-		return
-	}
-
-	stdout, err := m.cmd.StdoutPipe()
-	if err != nil {
-		m.output = append(m.output, errorStyle.Render("Failed to create stdout pipe: "+err.Error()))
-		m.updateViewport()
-		return
-	}
-
-	stderr, err := m.cmd.StderrPipe()
-	if err != nil {
-		m.output = append(m.output, errorStyle.Render("Failed to create stderr pipe: "+err.Error()))
-		m.updateViewport()
-		return
-	}
-
-	if err := m.cmd.Start(); err != nil {
 		m.output = append(m.output, errorStyle.Render("Failed to start agent: "+err.Error()))
 		m.updateViewport()
 		return
 	}
+	m.pty = ptmx
 
 	m.started = true
 	m.output = append(m.output, mutedStyle.Render(fmt.Sprintf("--- Started %s ---", m.agentName)))
 	m.updateViewport()
 
-	// Read stdout in background
+	// Read PTY output (stdout+stderr merged) in background.
+	// Strip ANSI escape codes before sending to viewport.
 	go func() {
-		scanner := bufio.NewScanner(stdout)
+		scanner := bufio.NewScanner(ptmx)
 		scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
 		for scanner.Scan() {
-			programSend(chatOutputMsg(scanner.Text()))
-		}
-	}()
-
-	// Read stderr in background
-	go func() {
-		scanner := bufio.NewScanner(stderr)
-		scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
-		for scanner.Scan() {
-			programSend(chatErrorMsg(scanner.Text()))
+			line := ansiEscape.ReplaceAllString(scanner.Text(), "")
+			programSend(chatOutputMsg(line))
 		}
 	}()
 
@@ -186,12 +167,15 @@ func validateAgentExecutable(exe string) error {
 var programSend func(tea.Msg)
 
 func (m *ChatModel) killAgent() {
+	if m.pty != nil {
+		_ = m.pty.Close()
+		m.pty = nil
+	}
 	if m.cmd != nil && m.cmd.Process != nil {
 		_ = m.cmd.Process.Kill()
 		_ = m.cmd.Wait()
 	}
 	m.cmd = nil
-	m.stdin = nil
 	m.started = false
 }
 
@@ -219,47 +203,64 @@ func (m ChatModel) Update(msg tea.Msg) (ChatModel, tea.Cmd) {
 		m.updateViewport()
 
 	case tea.KeyMsg:
-		switch msg.String() {
-		case "enter":
-			text := m.input.Value()
-			if text == "" {
-				return m, nil
-			}
-			m.input.SetValue("")
-
-			// Handle commands
-			if strings.HasPrefix(text, ":agent ") {
-				name := strings.TrimPrefix(text, ":agent ")
-				m.killAgent()
-				m.agentName = strings.TrimSpace(name)
-				m.output = append(m.output, mutedStyle.Render(fmt.Sprintf("--- Switching to %s ---", m.agentName)))
-				m.updateViewport()
-				m.spawnAgent()
-				return m, nil
-			}
-			if text == ":restart" {
-				m.killAgent()
-				m.output = append(m.output, mutedStyle.Render("--- Restarting ---"))
-				m.updateViewport()
-				m.spawnAgent()
-				return m, nil
-			}
-
-			// Send to subprocess
-			m.output = append(m.output, successStyle.Render("> ")+text)
-			m.updateViewport()
-
-			if m.stdin != nil {
-				fmt.Fprintln(m.stdin, text)
-			}
+		// Esc releases input focus (vim-style modal)
+		if msg.String() == "esc" && m.inputFocused {
+			m.inputFocused = false
+			m.input.Blur()
 			return m, nil
+		}
+		// 'i' focuses input when not focused
+		if msg.String() == "i" && !m.inputFocused {
+			m.inputFocused = true
+			m.input.Focus()
+			return m, nil
+		}
+
+		if m.inputFocused {
+			switch msg.String() {
+			case "enter":
+				text := m.input.Value()
+				if text == "" {
+					return m, nil
+				}
+				m.input.SetValue("")
+
+				// Handle commands
+				if strings.HasPrefix(text, ":agent ") {
+					name := strings.TrimPrefix(text, ":agent ")
+					m.killAgent()
+					m.agentName = strings.TrimSpace(name)
+					m.output = append(m.output, mutedStyle.Render(fmt.Sprintf("--- Switching to %s ---", m.agentName)))
+					m.updateViewport()
+					m.spawnAgent()
+					return m, nil
+				}
+				if text == ":restart" {
+					m.killAgent()
+					m.output = append(m.output, mutedStyle.Render("--- Restarting ---"))
+					m.updateViewport()
+					m.spawnAgent()
+					return m, nil
+				}
+
+				// Send to subprocess
+				m.output = append(m.output, successStyle.Render("> ")+text)
+				m.updateViewport()
+
+				if m.pty != nil {
+					fmt.Fprintln(m.pty, text)
+				}
+				return m, nil
+			}
 		}
 	}
 
 	// Update sub-components
 	var cmd tea.Cmd
-	m.input, cmd = m.input.Update(msg)
-	cmds = append(cmds, cmd)
+	if m.inputFocused {
+		m.input, cmd = m.input.Update(msg)
+		cmds = append(cmds, cmd)
+	}
 
 	m.viewport, cmd = m.viewport.Update(msg)
 	cmds = append(cmds, cmd)
@@ -268,24 +269,33 @@ func (m ChatModel) Update(msg tea.Msg) (ChatModel, tea.Cmd) {
 }
 
 func (m ChatModel) View() string {
-	header := titleStyle.Render("Chat")
-	agentStatus := mutedStyle.Render(fmt.Sprintf("  Agent: %s", m.agentName))
+	agentStatus := mutedStyle.Render(fmt.Sprintf("Agent: %s", m.agentName))
 	if m.started {
 		agentStatus += successStyle.Render("  [running]")
 	} else {
 		agentStatus += errorStyle.Render("  [stopped]")
 	}
 
-	vp := m.viewport.View()
-	input := m.input.View()
-
-	help := helpStyle.Render("  :agent <name> to switch | :restart to restart")
-
 	w := m.width - 4
 	if w < 40 {
 		w = 40
 	}
+
+	// Wrap viewport output in a bordered panel
+	outputPanel := panelStyle.Width(w - 4).Render(m.viewport.View())
+
+	// Wrap input in a bordered panel
+	inputPanel := panelStyle.Width(w - 4).Render(m.input.View())
+
+	var help string
+	if m.inputFocused {
+		help = helpStyle.Render("  Esc: release focus | :agent <name> to switch | :restart to restart")
+	} else {
+		help = helpStyle.Render("  i: focus input | Tab/1-5: navigate tabs")
+	}
+
+	header := titleStyle.Render("Chat") + "  " + agentStatus
 	return lipgloss.NewStyle().Width(w).Render(
-		header + agentStatus + "\n\n" + vp + "\n\n" + input + "\n" + help,
+		header + "\n\n" + outputPanel + "\n" + inputPanel + "\n" + help,
 	)
 }
