@@ -20,7 +20,7 @@ const (
 // CheckServer detects if the alaya MCP server is likely running by looking
 // for a python process with "alaya" in its command line.
 func CheckServer() ServerStatus {
-	out, err := exec.Command("pgrep", "-fl", "alaya.server").Output() // nosemgrep: go.lang.security.audit.dangerous-exec-command.dangerous-exec-command,alaya-tui-command-injection  #nosec G204 -- static args, no user input
+	out, err := exec.Command("pgrep", "-fl", "alaya.server").Output() //#nosec G204 -- static args, no user input
 	if err != nil {
 		return ServerStopped
 	}
@@ -63,7 +63,7 @@ func AuditLogFresh(vaultDir string, within time.Duration) bool {
 // SpawnServer starts the alaya MCP server as a background process.
 // Returns the process so the caller can track/kill it.
 func SpawnServer(vaultDir string) (*os.Process, error) {
-	cmd := exec.Command("uv", "run", "python", "-m", "alaya.server") // nosemgrep: go.lang.security.audit.dangerous-exec-command.dangerous-exec-command,alaya-tui-command-injection  #nosec G204 -- static args, no user input
+	cmd := exec.Command("uv", "run", "python", "-m", "alaya.server") //#nosec G204 -- static args, no user input
 	cmd.Env = append(os.Environ(), "ZK_NOTEBOOK_DIR="+vaultDir)
 	cmd.Dir = vaultDir
 	// Detach stdout/stderr so it doesn't interfere with TUI
