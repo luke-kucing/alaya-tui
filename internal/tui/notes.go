@@ -19,18 +19,19 @@ type treeNode struct {
 }
 
 type NotesModel struct {
-	notes    []backend.NoteMeta
-	tree     []*treeNode
-	flat     []treeNode // flattened visible nodes
-	cursor   int
-	offset   int
-	preview  string
-	width    int
-	height   int
+	vaultRoot string
+	notes     []backend.NoteMeta
+	tree      []*treeNode
+	flat      []treeNode // flattened visible nodes
+	cursor    int
+	offset    int
+	preview   string
+	width     int
+	height    int
 }
 
-func NewNotesModel() NotesModel {
-	return NotesModel{}
+func NewNotesModel(vaultRoot string) NotesModel {
+	return NotesModel{vaultRoot: vaultRoot}
 }
 
 func (m *NotesModel) SetNotes(notes []backend.NoteMeta) {
@@ -191,7 +192,7 @@ func (m *NotesModel) loadPreview() {
 		m.preview = ""
 		return
 	}
-	content, err := backend.ReadNotePreview(node.path, 30)
+	content, err := backend.ReadNotePreview(m.vaultRoot, node.path, 30)
 	if err != nil {
 		m.preview = errorStyle.Render("Error: " + err.Error())
 		return

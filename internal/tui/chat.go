@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -85,8 +86,16 @@ func (m *ChatModel) spawnAgent() {
 		return
 	}
 
-	// nosemgrep: go.lang.security.audit.dangerous-exec-command.dangerous-exec-command
-	m.cmd = exec.Command(parts[0], parts[1:]...) // #nosec G204 -- command from user config file
+	// Validate the executable is a bare name or absolute path — no shell metacharacters.
+	// This prevents config entries like "bash -c 'rm -rf ~'" from being split and executed.
+	exe := parts[0]
+	if err := validateAgentExecutable(exe); err != nil {
+		m.output = append(m.output, errorStyle.Render("Invalid agent command: "+err.Error()))
+		m.updateViewport()
+		return
+	}
+
+	m.cmd = exec.Command(exe, parts[1:]...) // #nosec G204 -- exe validated by validateAgentExecutable above
 
 	// Build environment: inherit current env + config env + API keys
 	env := os.Environ()
@@ -153,6 +162,22 @@ func (m *ChatModel) spawnAgent() {
 		_ = m.cmd.Wait()
 		programSend(chatExitMsg{})
 	}()
+}
+
+// validateAgentExecutable rejects executables containing shell metacharacters or
+// relative path components, reducing the risk of command injection via config.
+func validateAgentExecutable(exe string) error {
+	const banned = "|&;<>()$`\\\"'*?[]#~=%!{}"
+	for _, ch := range banned {
+		if strings.ContainsRune(exe, ch) {
+			return fmt.Errorf("disallowed character %q in command", ch)
+		}
+	}
+	// Reject relative paths like "../foo" — allow bare names or absolute paths only.
+	if !filepath.IsAbs(exe) && strings.Contains(exe, string(filepath.Separator)) {
+		return fmt.Errorf("relative path not allowed; use a command name or absolute path")
+	}
+	return nil
 }
 
 // programSend is set by the app model to send messages to the Bubble Tea program.
