@@ -6,7 +6,6 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 
 	"github.com/lukehinds/alaya-tui/internal/backend"
 )
@@ -202,5 +201,5 @@ func (m ActivityModel) View() string {
 	if w < 40 {
 		w = 40
 	}
-	return lipgloss.NewStyle().Width(w).Render(b.String())
+	return panelStyle.Width(w).Render(b.String())
 }

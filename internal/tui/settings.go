@@ -6,7 +6,6 @@ import (
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 
 	"github.com/lukehinds/alaya-tui/internal/config"
 )
@@ -291,7 +290,7 @@ func (m SettingsModel) View() string {
 	if w < 40 {
 		w = 40
 	}
-	return lipgloss.NewStyle().Width(w).Render(b.String())
+	return panelStyle.Width(w).Render(b.String())
 }
 
 func (m SettingsModel) viewAgents() string {

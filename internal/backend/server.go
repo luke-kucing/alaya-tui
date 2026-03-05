@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -21,13 +22,31 @@ const (
 // CheckServer detects if the alaya MCP server is likely running by scanning
 // /proc on Linux or reading ps output on macOS — no exec of pgrep.
 func CheckServer() ServerStatus {
+	return CheckServerWithProc(nil)
+}
+
+// CheckServerWithProc checks server status, preferring liveness check on a
+// known process before falling back to /proc scanning.
+func CheckServerWithProc(proc *os.Process) ServerStatus {
+	if proc != nil && isProcessAlive(proc) {
+		return ServerRunning
+	}
 	if checkProcFS() {
 		return ServerRunning
 	}
 	return ServerStopped
 }
 
-// checkProcFS scans /proc/*/cmdline (Linux) for an alaya.server process.
+// isProcessAlive sends signal 0 to check if a process is still running.
+func isProcessAlive(proc *os.Process) bool {
+	if proc == nil {
+		return false
+	}
+	err := proc.Signal(syscall.Signal(0))
+	return err == nil
+}
+
+// checkProcFS scans /proc/*/cmdline (Linux) for an alaya-mcp process.
 // Returns false on systems without /proc, so callers can fall back.
 func checkProcFS() bool {
 	entries, err := os.ReadDir("/proc")
@@ -42,8 +61,9 @@ func checkProcFS() bool {
 		if err != nil {
 			continue
 		}
-		// cmdline args are NUL-separated
-		if strings.Contains(string(cmdline), "alaya.server") {
+		// cmdline args are NUL-separated; match either package form
+		s := string(cmdline)
+		if strings.Contains(s, "alaya-mcp") || strings.Contains(s, "alaya_mcp") {
 			return true
 		}
 	}
@@ -89,7 +109,7 @@ func AuditLogFresh(vaultDir string, within time.Duration) bool {
 // Returns the process so the caller can track/kill it.
 func SpawnServer(vaultDir string) (*os.Process, error) {
 	// nosemgrep: go.lang.security.audit.dangerous-exec-command.dangerous-exec-command,alaya-tui-command-injection
-	cmd := exec.Command("uv", "run", "alaya") // #nosec G204 -- fully static args
+	cmd := exec.Command("uvx", "alaya-mcp") // #nosec G204 -- fully static args
 	cmd.Env = append(os.Environ(), "ALAYA_VAULT_DIR="+vaultDir)
 	cmd.Dir = vaultDir
 	// Detach stdout/stderr so it doesn't interfere with TUI

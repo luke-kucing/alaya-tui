@@ -6,8 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/lipgloss"
-
 	"github.com/lukehinds/alaya-tui/internal/backend"
 )
 
@@ -163,12 +161,11 @@ func (m DashboardModel) View() string {
 
 	content := strings.Join(sections, "\n\n")
 
-	// Constrain width
 	w := m.width - 4
 	if w < 40 {
 		w = 40
 	}
-	return lipgloss.NewStyle().Width(w).Render(content)
+	return panelStyle.Width(w).Render(content)
 }
 
 func truncate(s string, max int) string {
